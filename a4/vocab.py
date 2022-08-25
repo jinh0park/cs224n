@@ -169,7 +169,7 @@ class Vocab(object):
         self.tgt = tgt_vocab
 
     @staticmethod
-    def build(src_sents, tgt_sents) -> 'Vocab':
+    def build(src_sents, tgt_sents) -> 'Vocab':         # Make vocabulary with words in src_sents and tgt_sents each.
         """ Build Vocabulary.
         @param src_sents (list[str]): Source subwords provided by SentencePiece
         @param tgt_sents (list[str]): Target subwords provided by SentencePiece
