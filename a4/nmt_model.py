@@ -61,7 +61,7 @@ class NMT(nn.Module):
         ###     self.encoder (Bidirectional LSTM with bias)
         ###     self.decoder (LSTM Cell with bias)
         ###     self.h_projection (Linear Layer with no bias), called W_{h} in the PDF.
-        ###     self.c_projection (Linear Layer with no bias), called W_{c} in the PDF.
+        ###     self.c_projection (Linear Layer with no bias), called W_{c} in the PDF. (due to using bidirectional enc)
         ###     self.att_projection (Linear Layer with no bias), called W_{attProj} in the PDF.
         ###     self.combined_output_projection (Linear Layer with no bias), called W_{u} in the PDF.
         ###     self.target_vocab_projection (Linear Layer with no bias), called W_{vocab} in the PDF.
@@ -72,12 +72,19 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.LSTM
         ###     LSTM Cell:
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.LSTMCell
+        ###         https://stackoverflow.com/questions/57048120/pytorch-lstm-vs-lstmcell
         ###     Linear Layer:
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.Linear
         ###     Dropout Layer:
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.Dropout
         self.encoder = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bidirectional=True)
-
+        self.decoder = nn.LSTMCell(hidden_size, hidden_size)
+        self.h_projection = nn.Linear(2 * hidden_size, hidden_size, bias=False)
+        self.c_projection = nn.Linear(2 * hidden_size, hidden_size, bias=False)
+        self.att_projection = nn.Linear(2 * hidden_size, hidden_size, bias=False)
+        self.combined_output_projection = nn.Linear(3 * hidden_size, hidden_size, bias=False)
+        self.target_vocab_projection = nn.Linear(hidden_size, len(vocab.tgt), bias=False)
+        self.dropout = nn.Dropout(p=dropout_rate)
 
 
         ### END YOUR CODE
@@ -114,7 +121,7 @@ class NMT(nn.Module):
         P = F.log_softmax(self.target_vocab_projection(combined_outputs), dim=-1)
 
         # Zero out, probabilities for which we have nothing in the target text
-        target_masks = (target_padded != self.vocab.tgt['<pad>']).float()
+        target_masks = (target_padded != self.vocab.tgt['<pad>']).float()       # if True, 1.0
         
         # Compute log probability of generating true target words
         target_gold_words_log_prob = torch.gather(P, index=target_padded[1:].unsqueeze(-1), dim=-1).squeeze(-1) * target_masks[1:]
@@ -164,14 +171,18 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.utils.rnn.pack_padded_sequence
         ###     Pad the packed sequence, enc_hiddens, returned by the encoder:
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.utils.rnn.pad_packed_sequence
+        ###         https://stackoverflow.com/questions/51030782/why-do-we-pack-the-sequences-in-pytorch
         ###     Tensor Concatenation:
         ###         https://pytorch.org/docs/stable/torch.html#torch.cat
         ###     Tensor Permute:
         ###         https://pytorch.org/docs/stable/tensors.html#torch.Tensor.permute
-
-
-
-
+        X = self.model_embeddings.source(source_padded)
+        enc_hiddens, (last_hidden, last_cell) = self.encoder(pack_padded_sequence(X, source_lengths))
+        enc_hiddens, lens = pad_packed_sequence(enc_hiddens)
+        enc_hiddens = torch.permute(enc_hiddens, (1, 0, 2))
+        init_decoder_hidden = self.h_projection(torch.cat([*last_hidden], 1))
+        init_decoder_cell = self.c_projection(torch.cat([*last_cell], 1))
+        dec_init_state = (init_decoder_hidden, init_decoder_cell)
 
         ### END YOUR CODE
 

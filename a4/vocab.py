@@ -128,6 +128,7 @@ class VocabEntry(object):
         """
         word_ids = self.words2indices(sents)
         sents_t = pad_sents(word_ids, self['<pad>'])
+        # sentences expressed in indices
         sents_var = torch.tensor(sents_t, dtype=torch.long, device=device)
         return torch.t(sents_var)
 
